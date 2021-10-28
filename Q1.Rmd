@@ -6,3 +6,137 @@ output:
 ---
 
 # Exercise 1
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+# Loading the libraries
+library(readr)
+library(tidyverse)
+library(ggplot2)
+```
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+# Reading the data
+BusinessAnalyst <- read_csv("data/BusinessAnalyst.csv")
+DataAnalyst <- read_csv("data/DataAnalyst.csv")
+DataScientist <- read_csv("data/DataScientist.csv")
+```
+
+```{r}
+str(BusinessAnalyst)
+```
+
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+
+structure_quality <- function(data){
+  data <- data %>% 
+    filter(!endsWith(`Location`, "Kingdom")) %>% 
+    mutate(# Remove ratings from company name
+                          `Company Name` = substr(`Company Name`, 1, nchar(`Company Name`) - 4),
+                          # Remove employees from company size
+                          `Size (employees)` = as.factor(str_remove(`Size`," employees")),
+                          # Remove USD from revenue
+                          `Revenue (USD)` = str_remove(`Revenue`,
+                                                         " \\(USD\\)")) %>% 
+    select(-c(`Size`, `Revenue`))
+  return(data)
+} 
+
+BusinessAnalyst <- structure_quality(BusinessAnalyst)
+DataAnalyst <- structure_quality(DataAnalyst)
+DataScientist <- structure_quality(DataScientist)
+
+# Change -1 to NA for all columns - improbable & problamatic entries
+remove_negative1 <- function(data){
+  data$`Easy Apply`[data$`Easy Apply` == -1] <- NA
+  data$`Salary Estimate`[data$`Salary Estimate` == -1] <- NA
+  data$`Rating`[data$`Rating` == -1] <- NA
+  data$`Competitors`[data$`Competitors` == -1] <- NA
+  data$`Size (employees)`[data$`Size (employees)` == -1] <- NA
+  data$`Founded`[data$`Founded` == -1] <- NA
+  data$`Headquarters`[data$`Headquarters` == -1] <- NA
+  data$`Type of ownership`[data$`Type of ownership` == -1] <- NA
+  data$`Industry`[data$`Industry` == -1] <- NA
+  data$`Sector`[data$`Sector` == -1] <- NA
+  data$`Revenue (USD)`[data$`Revenue (USD)` == -1] <- NA
+  return(data)
+}
+
+BusinessAnalyst <- remove_negative1(BusinessAnalyst)
+DataAnalyst <- remove_negative1(DataAnalyst)
+DataScientist <- remove_negative1(DataScientist)
+```
+
+```{r}
+employer_est <- rbind(BusinessAnalyst %>% filter(str_detect(toupper(`Salary Estimate`), "PER HOUR")),
+                      DataAnalyst %>% filter(str_detect(toupper(`Salary Estimate`), "PER HOUR")), 
+                      DataScientist %>% filter(str_detect(toupper(`Salary Estimate`), "PER HOUR")))
+
+nrow(employer_est)
+```
+
+```{r}
+get_min_max <- function(data){
+  data %>% 
+  separate(`Salary Estimate`, c("min_salary", "max_salary"), sep = "-") %>% 
+  mutate(min_salary = as.numeric(paste0(substr(min_salary, 2, nchar(min_salary) - 1), "000")),
+         max_salary = as.numeric(paste0(substr(max_salary, 2, str_locate(pattern ='K', max_salary) - 1), "000")))
+}
+
+BusinessAnalyst <- get_min_max(BusinessAnalyst) %>% mutate(classification = "Business Analyst")
+DataAnalyst <- get_min_max(DataAnalyst) %>% mutate(classification = "Data Analyst")
+DataScientist <- get_min_max(DataScientist) %>% mutate(classification = "Data Scientist")
+
+all_data <- rbind(BusinessAnalyst, DataAnalyst, DataScientist)
+```
+
+```{r}
+options(scipen = 100000)
+q1_c_i <- all_data %>% 
+  select(classification, min_salary, max_salary) %>% 
+  na.omit() %>% 
+  group_by(classification) %>%
+  summarise(`Minimum Salary` = min(min_salary),
+            `Maximum Salary` = max(max_salary)) %>% 
+  pivot_longer(!classification, names_to = "salary_interval", values_to = "salary_value") %>% 
+  ggplot(aes(x = classification, y = salary_value, fill = salary_interval)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  theme(legend.title = element_blank()) + 
+  xlab("Job Classification") +
+  ylab("Salary Intervals") 
+  
+ggplotly(q1_c_i)
+  
+```
+
+```{r}
+all_data <- all_data %>% 
+  mutate(state = substr(`Location`, nchar(`Location`) - 1, nchar(`Location`)))
+
+all_data %>% select(classification, state) %>% 
+  group_by(classification, state) %>% 
+  summarise(count = n()) %>% 
+  na.omit() %>% 
+  ggplot(aes(x=state, y=count, color = classification)) +
+  geom_segment(aes(x=state, xend=state, y=0, yend=count), color="grey") +
+  geom_point(size=4) +
+  theme_light() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks.x = element_blank()
+  ) +
+  theme(legend.position = "NONE") +
+  facet_grid(classification~.)
+```
+
+
+
+```{r}
+all_data %>% filter(endsWith(`Location`, "om"))
+```
+
+
+
+
