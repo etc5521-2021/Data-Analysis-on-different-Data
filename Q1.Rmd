@@ -12,6 +12,7 @@ output:
 library(readr)
 library(tidyverse)
 library(ggplot2)
+library(hrbrthemes)
 ```
 
 ```{r, echo = FALSE, message=FALSE, warning=FALSE}
@@ -34,7 +35,8 @@ structure_quality <- function(data){
     mutate(# Remove ratings from company name
                           `Company Name` = substr(`Company Name`, 1, nchar(`Company Name`) - 4),
                           # Remove employees from company size
-                          `Size (employees)` = as.factor(str_remove(`Size`," employees")),
+                          `Size (employees)` = factor(str_remove(`Size`," employees"), 
+                                                      levels = c("1 to 50", "51 to 200", "201 to 500", "501 to 1000", "1001 to 5000", "5001 to 10000", "10000+", "Unknown", "NA")),
                           # Remove USD from revenue
                           `Revenue (USD)` = str_remove(`Revenue`,
                                                          " \\(USD\\)")) %>% 
@@ -78,6 +80,7 @@ nrow(employer_est)
 ```{r}
 get_min_max <- function(data){
   data %>% 
+    mutate(salary_estimate = `Salary Estimate`) %>% 
   separate(`Salary Estimate`, c("min_salary", "max_salary"), sep = "-") %>% 
   mutate(min_salary = as.numeric(paste0(substr(min_salary, 2, nchar(min_salary) - 1), "000")),
          max_salary = as.numeric(paste0(substr(max_salary, 2, str_locate(pattern ='K', max_salary) - 1), "000")))
@@ -111,10 +114,10 @@ ggplotly(q1_c_i)
 ```
 
 ```{r}
-all_data <- all_data %>% 
+state_data <- all_data %>% 
   mutate(state = substr(`Location`, nchar(`Location`) - 1, nchar(`Location`)))
 
-all_data %>% select(classification, state) %>% 
+state_data %>% select(classification, state) %>% 
   group_by(classification, state) %>% 
   summarise(count = n()) %>% 
   na.omit() %>% 
@@ -131,12 +134,108 @@ all_data %>% select(classification, state) %>%
   facet_grid(classification~.)
 ```
 
-
+```{r}
+all_data %>% 
+  group_by(`Size (employees)`, classification) %>% 
+  summarise(count = n()) %>% 
+  ggplot(aes(x=`Size (employees)`, y=count, color = classification)) +
+  geom_segment(aes(x=`Size (employees)`, xend=`Size (employees)`, y=0, yend=count), color="grey") +
+  geom_point(size=4) +
+  theme_light() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks.x = element_blank()
+  ) +
+  facet_grid(classification~.) +
+  theme(legend.position="none", axis.text.x=element_text(angle= 90), axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
+```
 
 ```{r}
-all_data %>% filter(endsWith(`Location`, "om"))
+library(treemap)
+
+industry <- all_data %>% 
+  group_by(Industry, classification) %>% 
+  summarise(count = n()) %>% 
+  na.omit()
+
+treemap(industry,
+            index=c("classification","Industry"),
+            vSize="count",
+            type="index",
+            palette = "Set2",
+            bg.labels=c("white"),
+            align.labels=list(
+              c("center", "center"), 
+              c("right", "bottom")
+            )  
+          )  
+```
+
+```{r}
+sector <- all_data %>% 
+  group_by(Sector, classification) %>% 
+  summarise(count = n()) %>% 
+  na.omit()
+
+treemap(sector,
+            index=c("classification","Sector"),
+            vSize="count",
+            type="index",
+            palette = "Set2",
+            bg.labels=c("white"),
+            align.labels=list(
+              c("center", "center"), 
+              c("right", "bottom")
+            )  
+          )  
 ```
 
 
+```{r}
+all_data %>%
+  select(max_salary, Rating, classification) %>% 
+  na.omit() %>% 
+  group_by(max_salary, classification) %>% 
+  summarise(median_rating = median(Rating)) %>% 
+  ggplot(aes(x = max_salary, y = median_rating, color = classification)) +
+  geom_line()+
+  facet_grid(classification~.) +
+  theme(legend.position = "NONE")
+```
+
+```{r}
+state_data %>% 
+  select(c(state, min_salary, classification)) %>% 
+  na.omit() %>% 
+  group_by(state) %>% 
+  summarise(mean_salary = mean(min_salary)) %>% 
+  ggplot(aes(x = state, y = mean_salary)) +
+  geom_line(group=1) +
+  theme(legend.position = "NONE")
+
+state_data %>% 
+  select(c(state, max_salary, classification)) %>% 
+  na.omit() %>% 
+  group_by(state) %>% 
+  summarise(mean_salary = mean(max_salary)) %>% 
+  ggplot(aes(x = state, y = mean_salary)) +
+  geom_line(group=1) +
+  theme(legend.position = "NONE")
+```
+
+```{r}
+q1_e <- state_data %>% 
+  select(c(state, Sector)) %>% 
+  na.omit() %>% 
+  group_by(state, Sector) %>% 
+  summarise(count = n()) %>% 
+  ggplot(aes(x = state, y = count, fill = Sector)) +
+  geom_col() +
+  facet_wrap(~Sector) +
+  theme(legend.position="none", axis.text.x=element_text(angle= 90), axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
+
+ggplotly(q1_e)
+```
 
 
