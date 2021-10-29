@@ -6,3 +6,26 @@ output:
 ---
 
 # Exercise 3
+
+```{r}
+library(readr)
+library(tidyverse)
+library(lubridate)
+experiment_data <- read_csv("data/experiment_data.csv")
+control_data <- read_csv("data/control_data.csv")
+
+```
+```{r}
+# Q3a
+
+all_data <- rbind(control_data %>% mutate(data = "control_data"),
+                  experiment_data %>% mutate(data = "experiment_data"))
+
+all_data <- all_data %>% mutate(Date = paste0(Date, " 2018"), 
+  Date = as.Date(Date, "%a, %b %d %Y"))
+
+all_data %>% 
+  ggplot(aes(x = Date, y = Pageviews, fill = data)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
