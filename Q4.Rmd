@@ -6,3 +6,45 @@ output:
 ---
 
 # Exercise 4
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(RColorBrewer)
+```
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+cholesterol <- read_csv("data/Cholesterol_R.csv")
+visinf_results <- read_csv("data/visinf-results.csv")
+```
+
+## Conduct a two-sample t-test and a Wilcoxon rank sum test to compare the mean cholesterol chol_red between the margarine brands after 4 weeks. What graphics best compares these measurements across the brands? What do you conclude from the results of the tests and your graphics?
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+
+chol_red <- cholesterol %>% 
+  mutate(chol_red = Before- After4weeks)
+
+
+t.test(chol_red~Margarine, 
+       alternative = "two.sided",
+       var.equal = TRUE,
+       data = chol_red)
+
+
+wilcox.test(chol_red~Margarine, 
+       alternative = "two.sided",
+       exact = F,
+       data = chol_red)
+
+
+with(chol_red, mean(chol_red[Margarine=="A"]) - mean(chol_red[Margarine=="B"]))
+
+ggplot(chol_red) +
+  geom_boxplot(aes(x = Margarine,
+                   y = chol_red, 
+                   fill = Margarine))+
+  theme_minimal() +
+  scale_fill_manual(values=c("#009688", "#8FCACA"))
+```
+
