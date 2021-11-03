@@ -13,6 +13,14 @@ library(readr)
 library(tidyverse)
 library(ggplot2)
 library(hrbrthemes)
+library(naniar)
+library(stringr)
+library(dplyr)
+library(leaflet)
+library(maps)
+library(plotly)
+library(kableExtra)
+library(ggwordcloud)
 ```
 
 ```{r, echo = FALSE, message=FALSE, warning=FALSE}
@@ -22,10 +30,28 @@ DataAnalyst <- read_csv("data/DataAnalyst.csv")
 DataScientist <- read_csv("data/DataScientist.csv")
 ```
 
-```{r}
-str(BusinessAnalyst)
+## Scrutinize the data to assess structure and quality. Are there any improbable or problematic entries? Provide a summary of checks performed and edit the data so entries are valid and meaningful where editing is reasonable to do.
+
+The data set is quiet well structured and the quality of the data set is good. However, there are a few problematic entries and the following section will remove these entries and modify the data set such that the data can be used easily for further analysis. 
+
+1. Though the data is meant to be collected from USA, there were a few entries where the company's location was mentioned to be United Kingdom. Such entries were removed from the data set. 
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+DataScientist %>% filter(endsWith(`Location`, "Kingdom")) %>% 
+  dplyr::select(c(`Job Title`, Location)) %>% 
+  kbl() %>%
+  kable_styling()
 ```
 
+2. All the company names contained the ratings attached along with it eventhough it was provided in a separate column. Therefore, they were also removed.
+
+3. The Size of employees column was of type character, therefore, they were converted to factors and the levels were set accordingly. 
+
+4. The Revenue column was all mentioned in USD, so the USD was removed from the columns and added to the column name.
+
+5. The salary estimate was very messy as it contained multiple factors/ranges and there were overlapping ranges too. The estimate contained different types such as Glassdoor estimate, employer estimate and per hour estimate. This has to be separated from the estimate value for easy data usage. The estimate ranges were reconstructed so that the number of different ranges are minimised.
+
+6. All the -1 values were converted to NAs
 
 ```{r, echo = FALSE, message=FALSE, warning=FALSE}
 
@@ -39,64 +65,83 @@ structure_quality <- function(data){
                                                       levels = c("1 to 50", "51 to 200", "201 to 500", "501 to 1000", "1001 to 5000", "5001 to 10000", "10000+", "Unknown", "NA")),
                           # Remove USD from revenue
                           `Revenue (USD)` = str_remove(`Revenue`,
-                                                         " \\(USD\\)")) %>% 
-    select(-c(`Size`, `Revenue`))
+                                                         " \\(USD\\)"),
+                          estimate_type = ifelse(str_detect(toupper(`Salary Estimate`), "PER HOUR"), "Per Hour (Glassdoor est.)",
+                                                 ifelse(str_detect(`Salary Estimate`, "(Glassdoor est.)"),"Annual (Glassdoor est.)",
+                                                        ifelse(str_detect(`Salary Estimate`, "(Employer est.)"),"Annual (Employer est.)",
+                                                               NA))),
+                          `Salary Estimate` = str_remove(`Salary Estimate`, "\\(Glassdoor est.\\)"),
+                          `Salary Estimate` = str_remove(`Salary Estimate`, "Per Hour"),
+                          `Salary Estimate` = str_remove(`Salary Estimate`, "\\(Employer est.\\)"),
+                          `Salary Estimate` = str_replace_all(`Salary Estimate`, "K", "000")
+                          ) %>% 
+    separate(`Salary Estimate`, c("min_salary", "max_salary"), sep = "-") %>% 
+    mutate(min_salary = as.numeric(substr(min_salary, 2, nchar(min_salary))),
+           max_salary = as.numeric(substr(max_salary, 2, nchar(max_salary))),
+           min_salary_1 = case_when(
+             min_salary >= 10 & min_salary < 20 ~ "10",
+             min_salary >= 20 & min_salary < 12000 ~ "20",
+             min_salary >= 12000 & min_salary < 20000 ~ "12000",
+             min_salary >= 20000 & min_salary < 30000 ~ "20000",
+             min_salary >= 30000 & min_salary < 40000 ~ "30000",
+             min_salary >= 40000 & min_salary < 50000 ~ "40000",
+             min_salary >= 50000 ~ "50000"
+           ),
+           max_salary_1 = case_when(
+             max_salary > 20 & max_salary <= 40 ~ "40",
+             max_salary > 40 & max_salary <= 60 ~ "60",
+             max_salary > 60 & max_salary <= 113000 ~ "113000",
+             max_salary > 113000 & max_salary <= 120000 ~ "120000",
+             max_salary > 120000 & max_salary <= 150000 ~ "150000",
+             max_salary > 150000 & max_salary <= 170000 ~ "170000",
+             max_salary > 170000 & max_salary <= 190000 ~ "190000",
+             max_salary > 190000 & max_salary <= 210000 ~ "210000",
+             max_salary > 210000 & max_salary <= 230000 ~ "230000",
+             max_salary > 230000 & max_salary <= 250000 ~ "250000",
+             max_salary > 250000 & max_salary <= 270000 ~ "270000"
+           ),
+           `Salary Estimate` = ifelse(is.na(min_salary_1) | is.na(max_salary_1), NA, paste(min_salary_1, "-", max_salary_1)),
+           min_salary = as.numeric(min_salary_1),
+           max_salary = as.numeric(max_salary_1)) %>% 
+    dplyr::select(-c(`Size`, `Revenue`, max_salary_1, min_salary_1))
+  
   return(data)
 } 
 
 BusinessAnalyst <- structure_quality(BusinessAnalyst)
 DataAnalyst <- structure_quality(DataAnalyst)
 DataScientist <- structure_quality(DataScientist)
-
-# Change -1 to NA for all columns - improbable & problamatic entries
-remove_negative1 <- function(data){
-  data$`Easy Apply`[data$`Easy Apply` == -1] <- NA
-  data$`Salary Estimate`[data$`Salary Estimate` == -1] <- NA
-  data$`Rating`[data$`Rating` == -1] <- NA
-  data$`Competitors`[data$`Competitors` == -1] <- NA
-  data$`Size (employees)`[data$`Size (employees)` == -1] <- NA
-  data$`Founded`[data$`Founded` == -1] <- NA
-  data$`Headquarters`[data$`Headquarters` == -1] <- NA
-  data$`Type of ownership`[data$`Type of ownership` == -1] <- NA
-  data$`Industry`[data$`Industry` == -1] <- NA
-  data$`Sector`[data$`Sector` == -1] <- NA
-  data$`Revenue (USD)`[data$`Revenue (USD)` == -1] <- NA
-  return(data)
-}
-
-BusinessAnalyst <- remove_negative1(BusinessAnalyst)
-DataAnalyst <- remove_negative1(DataAnalyst)
-DataScientist <- remove_negative1(DataScientist)
 ```
 
-```{r}
-employer_est <- rbind(BusinessAnalyst %>% filter(str_detect(toupper(`Salary Estimate`), "PER HOUR")),
-                      DataAnalyst %>% filter(str_detect(toupper(`Salary Estimate`), "PER HOUR")), 
-                      DataScientist %>% filter(str_detect(toupper(`Salary Estimate`), "PER HOUR")))
-
-nrow(employer_est)
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+# Change -1 to NA for all columns
+BusinessAnalyst <- na_if(BusinessAnalyst, -1) %>% mutate(classification = "Business Analyst")
+DataAnalyst <- na_if(DataAnalyst, -1) %>% mutate(classification = "Data Analyst")
+DataScientist <- na_if(DataScientist, -1) %>% mutate(classification = "Data Scientist")
 ```
 
-```{r}
-get_min_max <- function(data){
-  data %>% 
-    mutate(salary_estimate = `Salary Estimate`) %>% 
-  separate(`Salary Estimate`, c("min_salary", "max_salary"), sep = "-") %>% 
-  mutate(min_salary = as.numeric(paste0(substr(min_salary, 2, nchar(min_salary) - 1), "000")),
-         max_salary = as.numeric(paste0(substr(max_salary, 2, str_locate(pattern ='K', max_salary) - 1), "000")))
-}
+## b. How many job listings provide salary (intervals) in a per hour basis?
 
-BusinessAnalyst <- get_min_max(BusinessAnalyst) %>% mutate(classification = "Business Analyst")
-DataAnalyst <- get_min_max(DataAnalyst) %>% mutate(classification = "Data Analyst")
-DataScientist <- get_min_max(DataScientist) %>% mutate(classification = "Data Scientist")
-
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
 all_data <- rbind(BusinessAnalyst, DataAnalyst, DataScientist)
+
+per_hr <- all_data %>% 
+  group_by(estimate_type) %>% 
+  summarise(count = n()) %>% 
+  filter(estimate_type == "Per Hour (Glassdoor est.)")
+
+per_hr_count <- per_hr$count
 ```
 
-```{r}
+There are *`r per_hr_count`* job listings that provide salary(intervals) on a per hour basis. 
+
+## We want to investigate what the differences are between the job listings for those under different classification, i.e. business analytics, data analytics and data science. Compare across the classifications using appropriate graphics the:
+
+### salary intervals (study the minimum and maximum of the intervals)
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap="Maximum and Minimum Salary comparison"}
 options(scipen = 100000)
-q1_c_i <- all_data %>% 
-  select(classification, min_salary, max_salary) %>% 
+salary_int <- all_data %>% 
   na.omit() %>% 
   group_by(classification) %>%
   summarise(`Minimum Salary` = min(min_salary),
@@ -104,138 +149,323 @@ q1_c_i <- all_data %>%
   pivot_longer(!classification, names_to = "salary_interval", values_to = "salary_value") %>% 
   ggplot(aes(x = classification, y = salary_value, fill = salary_interval)) +
   geom_bar(stat = "identity", position = "dodge") +
-  theme_minimal() +
+  theme_light()+
   theme(legend.title = element_blank()) + 
   xlab("Job Classification") +
-  ylab("Salary Intervals") 
+  ylab("Salary Intervals") +
+  scale_fill_manual(values=c("#8FCACA", "#CCE2CB"))
   
-ggplotly(q1_c_i)
+ggplotly(salary_int)
   
 ```
 
-```{r}
-state_data <- all_data %>% 
-  mutate(state = substr(`Location`, nchar(`Location`) - 1, nchar(`Location`)))
+Data Scientists have the highest Max salary limit and also the lowest Min Salary limit. This also shows how diverse the Data Scientist job classification can be.
 
-state_data %>% select(classification, state) %>% 
-  group_by(classification, state) %>% 
+### location of the job (study by State)
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap="Location of Business Analyst job by state"}
+
+state_geo <- read.csv("data/statelatlong.csv")
+state_data <- all_data %>%
+  mutate(state = str_sub(`Location`,-2,-1))
+
+
+state_data_business_analyst <- state_data %>%
+  filter(classification == "Business Analyst") %>% 
+  group_by(state) %>% 
   summarise(count = n()) %>% 
-  na.omit() %>% 
-  ggplot(aes(x=state, y=count, color = classification)) +
-  geom_segment(aes(x=state, xend=state, y=0, yend=count), color="grey") +
-  geom_point(size=4) +
-  theme_light() +
-  theme(
-    panel.grid.major.x = element_blank(),
-    panel.border = element_blank(),
-    axis.ticks.x = element_blank()
-  ) +
-  theme(legend.position = "NONE") +
-  facet_grid(classification~.)
+  na.omit() 
+
+merged <- merge(x = state_data_business_analyst, y = state_geo, by.x = "state", by.y = "State", all.x = TRUE) 
+
+mapStates = map("state", fill = TRUE, plot = FALSE)
+leaflet(data = mapStates) %>% addTiles() %>%
+  addPolygons(fillColor = "#8FCACA", stroke = FALSE) %>% 
+  addCircleMarkers(lat = merged$Latitude, 
+                   lng = merged$Longitude, 
+                   radius = merged$count/20,
+                   color = "#011f4b",
+                   stroke = FALSE,
+                   fillOpacity = 1,
+                   label = paste0("State: ", merged$City, " Count: ", merged$count))
 ```
 
-```{r}
-all_data %>% 
-  group_by(`Size (employees)`, classification) %>% 
+In USA, Business Analyst jobs are more popular in the state of Texas and California. The count seems to be significantly less in New York which is a very interesting observation. 
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap="Location of Data Analyst job by state"}
+state_data_data_analyst <- state_data %>%
+  filter(classification == "Data Analyst") %>% 
+  group_by(state) %>% 
   summarise(count = n()) %>% 
-  ggplot(aes(x=`Size (employees)`, y=count, color = classification)) +
-  geom_segment(aes(x=`Size (employees)`, xend=`Size (employees)`, y=0, yend=count), color="grey") +
-  geom_point(size=4) +
-  theme_light() +
-  theme(
-    panel.grid.major.x = element_blank(),
-    panel.border = element_blank(),
-    axis.ticks.x = element_blank()
-  ) +
-  facet_grid(classification~.) +
-  theme(legend.position="none", axis.text.x=element_text(angle= 90), axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
+  na.omit() 
+
+merged <- merge(x = state_data_data_analyst, y = state_geo, by.x = "state", by.y = "State", all.x = TRUE) 
+
+mapStates = map("state", fill = TRUE, plot = FALSE)
+leaflet(data = mapStates) %>% addTiles() %>%
+  addPolygons(fillColor = "#8FCACA", stroke = FALSE) %>% 
+  addCircleMarkers(lat = merged$Latitude, 
+                   lng = merged$Longitude, 
+                   radius = merged$count/20,
+                   color = "#851e3e",
+                   stroke = FALSE,
+                   fillOpacity = 1,
+                   label = paste0("State: ", merged$City, " Count: ", merged$count))
 ```
 
-```{r}
-library(treemap)
+Compared to Business Analyst jobs, Data Analyst jobs are significantly lesser. Data Analyst Jobs are more popular in Texas, California and New York. 
 
-industry <- all_data %>% 
-  group_by(Industry, classification) %>% 
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap="Location of Data Scientist job by state"}
+state_data_data_sci <- state_data %>%
+  filter(classification == "Data Scientist") %>% 
+  group_by(state) %>% 
   summarise(count = n()) %>% 
-  na.omit()
+  na.omit() 
 
-treemap(industry,
-            index=c("classification","Industry"),
-            vSize="count",
-            type="index",
-            palette = "Set2",
-            bg.labels=c("white"),
-            align.labels=list(
-              c("center", "center"), 
-              c("right", "bottom")
-            )  
-          )  
+merged <- merge(x = state_data_data_sci, y = state_geo, by.x = "state", by.y = "State", all.x = TRUE) 
+
+mapStates = map("state", fill = TRUE, plot = FALSE)
+leaflet(data = mapStates) %>% addTiles() %>%
+  addPolygons(fillColor = "#8FCACA", stroke = FALSE) %>% 
+  addCircleMarkers(lat = merged$Latitude, 
+                   lng = merged$Longitude, 
+                   radius = merged$count/20,
+                   color = "#009688",
+                   stroke = FALSE,
+                   fillOpacity = 1,
+                   label = paste0("State: ", merged$City, " Count: ", merged$count))
 ```
 
-```{r}
-sector <- all_data %>% 
-  group_by(Sector, classification) %>% 
-  summarise(count = n()) %>% 
-  na.omit()
+The number of jobs for Data Scientists are comparatively higher when compared to Business and Data Analysts. This was also evident from the bar graph aove.  
 
-treemap(sector,
-            index=c("classification","Sector"),
-            vSize="count",
-            type="index",
-            palette = "Set2",
-            bg.labels=c("white"),
-            align.labels=list(
-              c("center", "center"), 
-              c("right", "bottom")
-            )  
-          )  
+### company size
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap = "Ratio of different company sizes for Business Analysts"}
+size_ba <- all_data %>%
+  filter(classification == "Business Analyst") %>% 
+  group_by(`Size (employees)`) %>% 
+  summarise(count = n()) %>% 
+  na.omit() 
+
+# Compute percentages
+size_ba$fraction <- size_ba$count / sum(size_ba$count)
+
+# Compute the cumulative percentages (top of each rectangle)
+size_ba$ymax <- cumsum(size_ba$fraction)
+
+# Compute the bottom of each rectangle
+size_ba$ymin <- c(0, head(size_ba$ymax, n=-1))
+
+# Compute label position
+size_ba$labelPosition <- (size_ba$ymax + size_ba$ymin) / 2
+
+# Compute a good label
+size_ba$label <- paste0("Size: ", size_ba$`Size (employees)`, "\n value: ", size_ba$count)
+
+# Make the plot
+ggplot(size_ba, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=`Size (employees)`)) +
+  geom_rect() +
+  geom_label( x=3.5, aes(y=labelPosition, label=label), size=2) +
+  scale_fill_brewer(palette=4) +
+  coord_polar(theta="y") +
+  xlim(c(2, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
 ```
 
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap = "Ratio of different company sizes for Data Analysts"}
+size_da <- all_data %>%
+  filter(classification == "Data Analyst") %>% 
+  group_by(`Size (employees)`) %>% 
+  summarise(count = n()) %>% 
+  na.omit() 
 
-```{r}
+# Compute percentages
+size_da$fraction <- size_da$count / sum(size_da$count)
+
+# Compute the cumulative percentages (top of each rectangle)
+size_da$ymax <- cumsum(size_da$fraction)
+
+# Compute the bottom of each rectangle
+size_da$ymin <- c(0, head(size_da$ymax, n=-1))
+
+# Compute label position
+size_da$labelPosition <- (size_da$ymax + size_da$ymin) / 2
+
+# Compute a good label
+size_da$label <- paste0("Size: ", size_da$`Size (employees)`, "\n value: ", size_da$count)
+
+# Make the plot
+ggplot(size_da, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=`Size (employees)`)) +
+  geom_rect() +
+  geom_label( x=3.5, aes(y=labelPosition, label=label), size=2) +
+  scale_fill_brewer(palette=4) +
+  coord_polar(theta="y") +
+  xlim(c(2, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap = "Ratio of different company sizes for Data Scientists"}
+size_ds <- all_data %>%
+  filter(classification == "Data Scientist") %>% 
+  group_by(`Size (employees)`) %>% 
+  summarise(count = n()) %>% 
+  na.omit() 
+
+# Compute percentages
+size_ds$fraction <- size_ds$count / sum(size_ds$count)
+
+# Compute the cumulative percentages (top of each rectangle)
+size_ds$ymax <- cumsum(size_ds$fraction)
+
+# Compute the bottom of each rectangle
+size_ds$ymin <- c(0, head(size_ds$ymax, n=-1))
+
+# Compute label position
+size_ds$labelPosition <- (size_ds$ymax + size_ds$ymin) / 2
+
+# Compute a good label
+size_ds$label <- paste0("Size: ", size_ds$`Size (employees)`, "\n value: ", size_ds$count)
+
+# Make the plot
+ggplot(size_ds, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=`Size (employees)`)) +
+  geom_rect() +
+  geom_label( x=3.5, aes(y=labelPosition, label=label), size=2) +
+  scale_fill_brewer(palette=4) +
+  coord_polar(theta="y") +
+  xlim(c(2, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+The number of startups (having lesser employee count) are higher for Business Analyst field while comapred to the rest, while Data Scientists have more oppurtunities in larger companies.
+
+### Industry
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap="Business Analyst in various Industries"}
 all_data %>%
-  select(max_salary, Rating, classification) %>% 
+  filter(classification == "Business Analyst") %>% 
+  group_by(Industry) %>% 
+  summarise(freq = n()) %>% 
   na.omit() %>% 
-  group_by(max_salary, classification) %>% 
-  summarise(median_rating = median(Rating)) %>% 
-  ggplot(aes(x = max_salary, y = median_rating, color = classification)) +
-  geom_line()+
-  facet_grid(classification~.) +
-  theme(legend.position = "NONE")
+  ggplot(
+  aes(label = Industry, size = freq*10, color = freq)) +
+  geom_text_wordcloud_area() +
+  theme_minimal()
 ```
 
-```{r}
-state_data %>% 
-  select(c(state, min_salary, classification)) %>% 
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap="Data Analyst in various Industries"}
+all_data %>%
+  filter(classification == "Data Analyst") %>% 
+  group_by(Industry) %>% 
+  summarise(freq = n()) %>% 
   na.omit() %>% 
-  group_by(state) %>% 
-  summarise(mean_salary = mean(min_salary)) %>% 
-  ggplot(aes(x = state, y = mean_salary)) +
-  geom_line(group=1) +
-  theme(legend.position = "NONE")
-
-state_data %>% 
-  select(c(state, max_salary, classification)) %>% 
+  ggplot(
+  aes(label = Industry, size = freq*10, color = freq)) +
+  geom_text_wordcloud_area() +
+  theme_minimal()
+```
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap="Data Scientist in various Industries"}
+all_data %>%
+  filter(classification == "Data Scientist") %>% 
+  group_by(Industry) %>% 
+  summarise(freq = n()) %>% 
   na.omit() %>% 
-  group_by(state) %>% 
-  summarise(mean_salary = mean(max_salary)) %>% 
-  ggplot(aes(x = state, y = mean_salary)) +
-  geom_line(group=1) +
-  theme(legend.position = "NONE")
+  ggplot(
+  aes(label = Industry, size = freq*10, color = freq)) +
+  geom_text_wordcloud_area() +
+  theme_minimal()
 ```
 
-```{r}
+Staff Outsourcing and IT services are the major industries where these 3 job classifications are predominant. 
+
+### Sector
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap="Data Scientist in various Sectors"}
+all_data %>% 
+  filter(classification == "Data Scientist") %>% 
+  group_by(Sector) %>% 
+  summarise(freq = n()) %>% 
+  na.omit() %>% 
+  ggplot(
+  aes(label = Sector, size = freq*10, color = freq)) +
+  geom_text_wordcloud_area() +
+  theme_minimal()  
+```
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap="Data Analyst in various Sectors"}
+all_data %>% 
+  filter(classification == "Data Analyst") %>% 
+  group_by(Sector) %>% 
+  summarise(freq = n()) %>% 
+  na.omit() %>% 
+  ggplot(
+  aes(label = Sector, size = freq*10, color = freq)) +
+  geom_text_wordcloud_area() +
+  theme_minimal()  
+```
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap="Business Analyst in various Sectors"}
+all_data %>% 
+  filter(classification == "Business Analyst") %>% 
+  group_by(Sector) %>% 
+  summarise(freq = n()) %>% 
+  na.omit() %>% 
+  ggplot(
+  aes(label = Sector, size = freq*10, color = freq)) +
+  geom_text_wordcloud_area() +
+  theme_minimal()  
+```
+
+Information Technology and Business Services are the predominant sectors where wthese job classifications are required.
+
+## Your friend suspects that if an employer provides a salary range for the job, the salary is large and hence more attractive to potential candidates. Investigate this claim. Your investigation should be supported by graphics.
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap="Maximum Salary vs Rating"}
+all_data %>%
+  group_by(classification, max_salary) %>% 
+  summarise(mean_rating = mean(as.numeric(Rating), na.rm = TRUE)) %>% 
+  ggplot(aes(x = max_salary, y = mean_rating, color = classification)) +
+  geom_point() +
+  theme_minimal()
+```
+
+This claim seems to be true based on the above graph. As it can be seen, the job ratings get higher as the salary gets higher. 
+
+## Is the location (via by State) associated with the salary and/or sector? Show graphics to best your conclusion.
+
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap="Salary vs State"}
+a <- state_data %>% 
+  group_by(state) %>% 
+  summarise(mean_salary_min = mean(min_salary)) 
+
+b <- state_data %>% 
+  group_by(state) %>% 
+  summarise(mean_salary_max = mean(max_salary)) 
+
+merge(a, b, by = "state") %>% 
+  pivot_longer(-state, names_to="Min_max_sal", values_to="value") %>% 
+  ggplot(aes(x = state, y = value, color = Min_max_sal)) +
+  geom_point() +
+  theme_minimal()
+```
+
+The salary range in California, Texas and New York are comparitively higher when compared to the rest. 
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.cap="Sector vs State"}
 q1_e <- state_data %>% 
-  select(c(state, Sector)) %>% 
+  dplyr::select(c(state, Sector)) %>% 
   na.omit() %>% 
   group_by(state, Sector) %>% 
   summarise(count = n()) %>% 
   ggplot(aes(x = state, y = count, fill = Sector)) +
   geom_col() +
-  facet_wrap(~Sector) +
+  theme_minimal() +
   theme(legend.position="none", axis.text.x=element_text(angle= 90), axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
 
 ggplotly(q1_e)
 ```
-
+The sector count is higher in Texas and California when compared to the rest. This mayb also be due to the number of listings that are more in number for these 2 states. 
 

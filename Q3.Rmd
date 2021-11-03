@@ -13,11 +13,12 @@ library(tidyverse)
 library(lubridate)
 experiment_data <- read_csv("data/experiment_data.csv")
 control_data <- read_csv("data/control_data.csv")
-
 ```
-```{r}
-# Q3a
 
+
+a) Make a plot (or two) of the data that provides a suitable comparison between the pageviews of the two groups relative to time. Write a sentence comparing the two groups.
+
+```{r}
 all_data <- rbind(control_data %>% mutate(data = "control_data"),
                   experiment_data %>% mutate(data = "experiment_data"))
 
@@ -28,4 +29,193 @@ all_data %>%
   ggplot(aes(x = Date, y = Pageviews, fill = data)) +
   geom_bar(stat = "identity", position = "dodge")
 ```
+
+
+b) Make an appropriate transformation of the data, and plot, to examine whether there is a difference in Clicks, summarising what you learn.
+
+```{r}
+Q3b <- all_data %>% 
+  dplyr::select(Date, Clicks, data) %>% 
+  group_by(months(Date), data) %>% 
+  summarise(Clicks = sum(Clicks)) %>% 
+  ggplot(aes(x = `months(Date)`, y = Clicks, fill = data))+
+  geom_bar(stat = "identity", position = "dodge")
+  
+Q3b
+
+```
+
+
+c) Repeat (b) to check if there is a difference between the groups in Enrollments, summarising what you learn.
+
+```{r}
+Q3c <- all_data %>% 
+  na.omit() %>% 
+  dplyr::select(Date, Enrollments, data) %>% 
+  group_by(months(Date), data) %>% 
+  summarise(Enrollments = sum(Enrollments)) %>% 
+  ggplot(aes(x = `months(Date)`, y = Enrollments, fill = data))+
+  geom_bar(stat = "identity", position = "dodge")
+  
+Q3c
+```
+
+
+
+d) Repeat (b) to check if there is a difference between the groups in Payments, summarising what you learn.
+
+```{r}
+Q3d <- all_data %>% 
+  na.omit() %>% 
+  dplyr::select(Date, Payments, data) %>% 
+  group_by(months(Date), data) %>% 
+  summarise(Payments = sum(Payments)) %>% 
+  ggplot(aes(x = `months(Date)`, y = Payments, fill = data))+
+  geom_bar(stat = "identity", position = "dodge")
+  
+Q3d
+```
+
+
+e) The variables can be considered to monitor the flow of visitor traffic to the site. Pageviews is the number of visitors to the site, and some of these will click on the page. From those that click on the site some will enrol, and some of those that enrol will continue to pay for the service. Make a suitable plot to examine the flow of traffic, so that you can compare the flow between the two groups.
+
+```{r}
+library(dplyr)
+Q3e.experiment <- experiment_data %>% 
+  dplyr::select(-c("Date")) %>% 
+  mutate(Pageviews = dplyr::case_when(
+      Pageviews > 7000 & Pageviews <= 8000 ~ "7000-8000 Pageviews",
+      Pageviews > 8000 & Pageviews <= 9000 ~ "8000-9000 Pageviews",
+      Pageviews > 9000 & Pageviews <= 10000 ~ "9000-10000 Pageviews",
+      Pageviews > 1000 & Pageviews <= 11000 ~ "10000-11000 Pageviews"
+    ),
+    # Convert to factor
+    Pageviews = factor(
+      Pageviews,
+      level = c("7000-8000 Pageviews", 
+                "8000-9000 Pageviews", 
+                "9000-10000 Pageviews",
+                "10000-11000 Pageviews")
+    ),
+    Clicks = dplyr::case_when(
+      Clicks > 600 & Clicks <= 700 ~ "600-700 Clicks",
+      Clicks > 700 & Clicks <= 800 ~ "700-800 Clicks",
+      Clicks > 800 & Clicks <= 900 ~ "800-900 Clicks",
+      Clicks > 900 & Clicks <= 1000 ~ "900-1000 Clicks"
+    ),
+    # Convert to factor
+    Clicks = factor(
+      Clicks,
+      level = c("600-700 Clicks", "700-800 Clicks", "800-900 Clicks", "900-1000 Clicks")
+    ),
+    Enrollments = dplyr::case_when(
+      Enrollments > 90 & Enrollments <= 120 ~ "90-120 Enrollments",
+      Enrollments > 120 & Enrollments <= 150 ~ "120-150 Enrollments",
+      Enrollments > 150 & Enrollments <= 180 ~ "150-180 Enrollments",
+      Enrollments > 180 & Enrollments <= 210 ~ "180-210 Enrollments",
+      Enrollments > 210 & Enrollments <= 250 ~ "210-250 Enrollments"
+    ),
+    # Convert to factor
+    Enrollments = factor(
+      Enrollments,
+      level = c("90-120 Enrollments", "120-150 Enrollments", "150-180 Enrollments", "180-210 Enrollments", "210-250 Enrollments")
+    ),
+    Payments = dplyr::case_when(
+      Payments > 30 & Payments <= 50 ~ "30-50 Payments",
+      Payments > 50 & Payments <= 70 ~ "50-70 Payments",
+      Payments > 70 & Payments <= 90 ~ "70-90 Payments",
+      Payments > 90 & Payments <= 110 ~ "90-110 Payments",
+      Payments > 110 & Payments <= 130 ~ "110-130 Payments"
+    ),
+    # Convert to factor
+    Payments = factor(
+      Payments,
+      level = c("30-50 Payments", "50-70 Payments", "70-90 Payments", "90-110 Payments", "110-130 Payments")
+    )
+    )
+```
+
+```{r}
+plot.1 <- Q3e.experiment %>% 
+  group_by(Pageviews, Clicks) %>% 
+  summarise(count = n()) %>% 
+  rename(c(
+    "source" = "Pageviews",
+    "target" = "Clicks"
+  ))
+```
+
+```{r}
+plot.2 <- Q3e.experiment %>% 
+  group_by( Clicks, Enrollments) %>% 
+  summarise(count = n())%>% 
+  rename(c(
+    "source" = "Clicks",
+    "target" = "Enrollments"
+  ))
+```
+
+
+```{r}
+plot.3 <- Q3e.experiment %>% 
+  group_by(Enrollments, Payments) %>% 
+  summarise(count = n()) %>% 
+  rename(c(
+    "source" = "Enrollments",
+    "target" = "Payments"
+  ))
+```
+
+```{r}
+library(networkD3)
+links <- rbind(plot.1, plot.2, plot.3) %>% na.omit()
+nodes <- data.frame(
+  name=c(as.character(links$source), as.character(links$target)) %>% 
+    unique()
+  )
+
+links$IDsource <- match(links$source, nodes$name)-1 
+links$IDtarget <- match(links$target, nodes$name)-1
+
+ColourScal ='d3.scaleOrdinal() .range(["#FDE725FF","#B4DE2CFF","#6DCD59FF","#35B779FF","#1F9E89FF","#26828EFF","#31688EFF","#3E4A89FF","#482878FF","#440154FF"])'
+
+# Make the Network
+sankeyNetwork(Links = links, Nodes = nodes,
+                     Source = "IDsource", Target = "IDtarget",
+                     Value = "count", NodeID = "name", 
+                     sinksRight=FALSE, colourScale=ColourScal, nodeWidth=40, fontSize=13, nodePadding=20)
+
+```
+
+```{r}
+numbers <- sample(c(1:1000), 100, replace = T)
+data <- matrix( numbers, ncol=5)
+rownames(data) <- paste0("orig-", seq(1,20))
+colnames(data) <- paste0("dest-", seq(1,5))
+
+# Load the circlize library
+library(circlize)
+ 
+# Make the circular plot
+chordDiagram(data, transparency = 0.5)
+```
+
+```{r}
+
+```
+
+```{r}
+all_data <- all_data %>% mutate(NoClicks = Pageviews - Clicks)
+ggplot(lineup(null_permute("Group"), lineupD ,n = 8,
+                pos = 2), aes(y = `No Clicks`, x = Group, color = Group)) +
+  geom_boxplot() +
+  facet_wrap(~.sample, nrow = 2) +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks.length = unit(0, "pt")) +
+  guides(color = "none")
+```
+
+
+
 
