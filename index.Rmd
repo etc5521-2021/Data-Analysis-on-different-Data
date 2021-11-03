@@ -1,6 +1,6 @@
 ---
 title: "ETC5523 Assignment 3"
-author: "[FILL]"
+author: "Sahinya Akila"
 date: "`r Sys.Date()`"
 output: 
   bookdown::html_document2
