@@ -7,81 +7,85 @@ output:
 
 # Exercise 3
 
-```{r}
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
 library(readr)
 library(tidyverse)
 library(lubridate)
+library(dplyr)
+library(networkD3)
+library(nullabor)
 experiment_data <- read_csv("data/experiment_data.csv")
 control_data <- read_csv("data/control_data.csv")
 ```
 
 
-a) Make a plot (or two) of the data that provides a suitable comparison between the pageviews of the two groups relative to time. Write a sentence comparing the two groups.
+## Make a plot (or two) of the data that provides a suitable comparison between the pageviews of the two groups relative to time. Write a sentence comparing the two groups.
 
-```{r}
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
 all_data <- rbind(control_data %>% mutate(data = "control_data"),
                   experiment_data %>% mutate(data = "experiment_data"))
 
-all_data <- all_data %>% mutate(Date = paste0(Date, " 2018"), 
+all_data <- all_data %>% mutate(Date = paste(Date, " 2018"), 
   Date = as.Date(Date, "%a, %b %d %Y"))
 
 all_data %>% 
-  ggplot(aes(x = Date, y = Pageviews, fill = data)) +
-  geom_bar(stat = "identity", position = "dodge")
+  ggplot(aes(x = Date, y = Pageviews, color = data)) +
+  geom_line() +
+  scale_color_manual(values=c("#009688", "#8FCACA")) +
+  theme_minimal()
 ```
 
+The pageviews of both the control and experimental data are similar in value.
 
-b) Make an appropriate transformation of the data, and plot, to examine whether there is a difference in Clicks, summarising what you learn.
+## Make an appropriate transformation of the data, and plot, to examine whether there is a difference in Clicks, summarising what you learn.
 
-```{r}
-Q3b <- all_data %>% 
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+all_data %>% 
   dplyr::select(Date, Clicks, data) %>% 
   group_by(months(Date), data) %>% 
   summarise(Clicks = sum(Clicks)) %>% 
   ggplot(aes(x = `months(Date)`, y = Clicks, fill = data))+
-  geom_bar(stat = "identity", position = "dodge")
-  
-Q3b
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values=c("#009688", "#8FCACA")) +
+  theme_minimal()
 
 ```
 
+The number of clicks between both the data sets are also similar in value.
 
-c) Repeat (b) to check if there is a difference between the groups in Enrollments, summarising what you learn.
+## Repeat (b) to check if there is a difference between the groups in Enrollments, summarising what you learn.
 
-```{r}
-Q3c <- all_data %>% 
-  na.omit() %>% 
-  dplyr::select(Date, Enrollments, data) %>% 
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+all_data %>% 
   group_by(months(Date), data) %>% 
-  summarise(Enrollments = sum(Enrollments)) %>% 
+  summarise(Enrollments = sum(Enrollments, na.rm = TRUE)) %>% 
   ggplot(aes(x = `months(Date)`, y = Enrollments, fill = data))+
-  geom_bar(stat = "identity", position = "dodge")
-  
-Q3c
+  geom_bar(stat = "identity", position = "dodge")+
+  scale_fill_manual(values=c("#009688", "#8FCACA")) +
+  theme_minimal()
+
 ```
 
+Again, there is not much difference between the 2 data sets. However the number of enrollments in November is significantly lesser than October.
 
+## Repeat (b) to check if there is a difference between the groups in Payments, summarising what you learn.
 
-d) Repeat (b) to check if there is a difference between the groups in Payments, summarising what you learn.
-
-```{r}
-Q3d <- all_data %>% 
-  na.omit() %>% 
-  dplyr::select(Date, Payments, data) %>% 
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+all_data %>% 
   group_by(months(Date), data) %>% 
-  summarise(Payments = sum(Payments)) %>% 
+  summarise(Payments = sum(Payments, na.rm = TRUE)) %>% 
   ggplot(aes(x = `months(Date)`, y = Payments, fill = data))+
-  geom_bar(stat = "identity", position = "dodge")
-  
-Q3d
+  geom_bar(stat = "identity", position = "dodge")+
+  scale_fill_manual(values=c("#009688", "#8FCACA")) +
+  theme_minimal()
 ```
 
+The number of payments are also similar among the two datasets. Payments have been higher in October.
 
-e) The variables can be considered to monitor the flow of visitor traffic to the site. Pageviews is the number of visitors to the site, and some of these will click on the page. From those that click on the site some will enrol, and some of those that enrol will continue to pay for the service. Make a suitable plot to examine the flow of traffic, so that you can compare the flow between the two groups.
+### The variables can be considered to monitor the flow of visitor traffic to the site. Pageviews is the number of visitors to the site, and some of these will click on the page. From those that click on the site some will enrol, and some of those that enrol will continue to pay for the service. Make a suitable plot to examine the flow of traffic, so that you can compare the flow between the two groups.
 
-```{r}
-library(dplyr)
-Q3e.experiment <- experiment_data %>% 
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+experiment <- experiment_data %>% 
   dplyr::select(-c("Date")) %>% 
   mutate(Pageviews = dplyr::case_when(
       Pageviews > 7000 & Pageviews <= 8000 ~ "7000-8000 Pageviews",
@@ -135,8 +139,8 @@ Q3e.experiment <- experiment_data %>%
     )
 ```
 
-```{r}
-plot.1 <- Q3e.experiment %>% 
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+pageviews_clicks <- experiment %>% 
   group_by(Pageviews, Clicks) %>% 
   summarise(count = n()) %>% 
   rename(c(
@@ -145,8 +149,8 @@ plot.1 <- Q3e.experiment %>%
   ))
 ```
 
-```{r}
-plot.2 <- Q3e.experiment %>% 
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+clicks_enrollments <- experiment %>% 
   group_by( Clicks, Enrollments) %>% 
   summarise(count = n())%>% 
   rename(c(
@@ -156,8 +160,8 @@ plot.2 <- Q3e.experiment %>%
 ```
 
 
-```{r}
-plot.3 <- Q3e.experiment %>% 
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+enrollments_payments <- experiment %>% 
   group_by(Enrollments, Payments) %>% 
   summarise(count = n()) %>% 
   rename(c(
@@ -166,9 +170,8 @@ plot.3 <- Q3e.experiment %>%
   ))
 ```
 
-```{r}
-library(networkD3)
-links <- rbind(plot.1, plot.2, plot.3) %>% na.omit()
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+links <- rbind(pageviews_clicks, clicks_enrollments, enrollments_payments) %>% na.omit()
 nodes <- data.frame(
   name=c(as.character(links$source), as.character(links$target)) %>% 
     unique()
@@ -187,21 +190,58 @@ sankeyNetwork(Links = links, Nodes = nodes,
 
 ```
 
-```{r}
+The flow gets significantly reduced when moving from one part to another.
 
-```
+### Check what you learn about the difference in flow of traffic between control and experiment using a lineup plot.
 
-```{r}
-all_data <- all_data %>% mutate(NoClicks = Pageviews - Clicks)
-ggplot(lineup(null_permute("Group"), lineupD ,n = 8,
-                pos = 2), aes(y = `No Clicks`, x = Group, color = Group)) +
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+set.seed(33)
+lineup_data <- all_data %>% 
+  mutate(NonClicks = Pageviews - Clicks,
+         NonEnrollment = Clicks - Enrollments,
+         NonPayments = Enrollments - Payments) %>% 
+  na.omit()
+
+
+# For No Clicks
+ggplot(lineup(null_permute('NonClicks'), lineup_data, n = 8, 
+                pos = 2), aes(x = data, 
+                              y = NonClicks, 
+                              fill = data)) +
   geom_boxplot() +
   facet_wrap(~.sample, nrow = 2) +
-  theme(axis.text = element_blank(),
-        axis.title = element_blank(),
-        axis.ticks.length = unit(0, "pt")) +
-  guides(color = "none")
+  ggtitle("Lineup plot for No Clicks")+
+  scale_fill_manual(values=c("#009688", "#8FCACA")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ 
+
+# For No Enrollment
+ggplot(lineup(null_permute('NonEnrollment'), lineup_data, n = 8, 
+                pos = 2), aes(x = data, 
+                              y = NonEnrollment, 
+                              fill = data)) +
+  geom_violin() +
+  facet_wrap(~.sample, nrow = 2) +
+  ggtitle("Lineup plot for No Enrollments")+
+  scale_fill_manual(values=c("#009688", "#8FCACA")) +
+  theme_minimal()+ 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ 
+
+# For No Payment
+ggplot(lineup(null_permute('NonPayments'), lineup_data, n = 8, 
+                pos = 2), aes(x = data, 
+                              y = NonPayments, 
+                              color = data)) +
+  ggbeeswarm::geom_quasirandom() +
+  facet_wrap(~.sample, nrow = 2) +
+  ggtitle("Lineup plot for No Payments")+
+  scale_color_manual(values=c("#009688", "#8FCACA")) +
+  theme_minimal()+ 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 ```
+
 
 
 
